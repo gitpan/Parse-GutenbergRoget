@@ -14,11 +14,11 @@ Parse::GutenbergRoget - parse Project Gutenberg's Roget's Thesaurus
 
 =head1 VERSION
 
-version 0.01
+version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
@@ -91,7 +91,7 @@ It returns a hash with the following structure:
 This structure isn't pretty or perfect, and is subject to change.  All of its
 elements are shown here, except for one exception, which is the next likely
 subject for change: flags.  Entries may have flags, in addition to text, which 
-note things like "French" or "archaic."  Entries (or possibly groups) will also
+note things like "French" or "archaic".  Entries (or possibly groups) will also
 gain cross reference attribues, replacing the ugly "&c. XX" text.  I'd also
 like to deal with references to other subsections, which come in the form "&c.
 Adj."  There isn't any reason for these to be needed, I think.
@@ -131,7 +131,7 @@ sub parse_sections {
 		next unless $line;
 		next if ($line =~ /^#/); # comment
 
-		if ($line =~ /^<--/) { $in_longcomment = 1; }
+		if ($line =~ /^\s*<--/) { $in_longcomment = 1; }
 		if ($line =~ /-->$/) { $in_longcomment = 0; next; }
 		next if $in_longcomment;
 
@@ -150,7 +150,8 @@ sub parse_sections {
 			if ($peeked_line and $peeked_line !~ /^\s{4}/
 				and $peeked_line !~ /^(?:#|%|<--)/)
 			{
-				$line .= " $peeked_line";
+				$line .= ' ' unless (substr($line, -1, 1) eq '-');
+				$line .= $peeked_line;
 				undef $peeked_line;
 				if ($line =~ /[^,]+,[^.]+\.\s{4}/) {
 					($line, $peeked_line) = split /\s{4}/, $line, 2;
@@ -242,12 +243,165 @@ sub bloom_sections {
 
 =head1 THE FILE
 
-A description of the source file's format, or lack thereof, will go here.
+=over 4
+
+=item * The thesaurus file is plain text, in 7-bit ASCII.
+
+=item * Lines with a C<#> as their first character are comments.
+
+=item * Lines beginning with C<< <-- >> begin multi-line comments.
+
+=item * Lines ending with C<< --> >> end multi-line comments.
+
+These multi-line comments were originally used for including the page numbers
+from the original text.  Later editors used them (instead of C<#> comments) to
+mark their editorial notes.
+
+There exists one situation in C<roget15a.txt> where the C<< <-- >> occurs
+outside of position zero in a line.
+
+=item * A line containing only C<%> begins or ends new "supersection" data.
+
+So, if we wanted to begin a new supersection for "States of Mind", we might
+have the following:
+
+ %
+ STATES OF MIND
+ %
+
+Unfortunately, there is almost no consistency in how these supersections are
+organized.  Some entries declare new sections "SECTION VII. CHANGE" and
+immediately begin new subsupersections, "1. SIMPLE CHANGE".  Others just give
+headings: "Present Events" 
+
+Then there is this excerpt:
+
+ %
+                          CLASS II
+                     WORDS RELATING TO SPACE
+ 
+                SECTION I.  SPACE IN GENERAL
+ 
+ 1. ABSTRACT SPACE
+ %
+
+I think the only thing to do is ignore all this crap, so that's what is done.
+
+=item * Lines do not exceed 79 characters in width.
+
+=item * New lines begin in column 6.
+
+Some, though, begin in column 5, 6, or 8.  A line starting in column 4 or less
+is always a continuation, unless it's in 0.  (I'm not considering comments.)
+
+Also, new lines might begin in any column, when a period that does not follow
+the declaration of a subsection type is followed by at least four spaces.
+
+=item * Lines in column 0 are continuation.
+
+Unless the previous line ended with a period.
+
+Continuations are appended to the continued line.  Unless the continued line
+ended with a hyphen, a space is used to join the lines.
+
+There is at least one case where a word is split without a hyphen, appearing as
+"crocu\ns".  This word is left broken in the parsed text.
+
+=item * New lines beginning with a C<#> (not in column 0) begin new sections.
+
+The C<#> is omitted in one case, section 252a.
+
+=item * The C<#> in a section heading is followed by the section identifier.
+
+The section identifier is a series of numbers followed by an optional letter
+and terminated by a period.
+
+=item * The section header is followed by a name and comments.
+
+The comments are marked off by square brackets, and may occur before or after
+the name, or both.
+
+The name is all the rest of the text between the comments and before a
+terminating C<-->.
+
+=item * Once section headers are removed, every new line is a new subsection.
+
+=item * Subsections may begin with a type declaration.
+
+A type declaration indicates that all entries in the subsection are of one
+part of speech: adjective, adverb, noun, interjection, phrase, and so on.
+
+=item * Subsections with no declared type are of the type of the previous subsection.
+
+Despite this rule, some subsections have no type.  I file them as UNKNOWN.
+
+=item * Subsections are divided into groups by semicolons.
+
+Semicolons don't divide subsections, if they occur within double quotes.  The
+quotes can be part of the line, and need not quote the entire group.
+
+In other words, this is a valid subsection, consisting of three groups:
+
+ ...
+      Int. go for it; "go ahead; make my day" [Dirty Harry]; give it a try,
+ take a shot.
+ ...
+
+=item * Groups are divided into entries by commas.
+
+Commas don't divide groups, if they occur within double quotes.  The quotes can
+be just part of the entry, and need not quote the entire entry.
+
+Some groups include the entry-breaking comma inside the quotes, like this one:
+
+      Phr. it must go no further, it will go no further; don't tell a
+ soul;"tell it not in Gath,"nobody the wiser; alitur vitium vivitque
+ tegendo[Lat][obs3]; "let it be tenable in your silence still"[Hamlet].
+
+The comma after "Gath" should be on the outside.
+
+=item * Flags may follow the text of an entry.
+
+Flags are either text enclosed in square brackets, as "[Lat]" or the special
+identifiers C<|!> or C<|>.  These flags provide metadata about the entry, like
+its language of origin or the domain of jargon in which it is relevant.  C<|>
+indicates that a word was obsolete in the 1911 edition, and C<|!> indicates
+words that were no longer used as indicated by 1991.  (A third obsolete status
+is indicated by the flag "[obs3]" meaning "entirely archaic as of 1991.")
+
+Sometimes, flags occur outside of quotes, and sometimes they're inside.  The
+example text above shows flags outside of the Hamlet quote, but this section
+(which really exists) is a counter-example:
+
+      Phr. noli me tangere[Lat]; nemo me impune lacessit[Lat]; don't tread
+ on me; don't you dare; don't even think of it; "Go ahead, make my day!"
+ [Dirty Harry].
+
+=item * Cross-references may follow the entry.
+
+I haven't determined whether any entries have both a cross-reference I<and>
+flags.
+
+A cross-reference is in the form "c&. 123" where 123 is a section, or "c&. n."
+where "n" refers to the noun-type subsections for this section.
+
+Unfortunately, cross-references are not always followed by commas or
+semicolons, meaning that they sometimes seem to appear in the middle of an
+entry, as follows:
+
+      miss, miss one's aim, miss the mark, miss one's footing, miss stays;
+ slip, trip, stumble; make a slip &c., n. blunder &c. 495, make a mess of,
+ ...
+
+The cross-reference after "make a slip" should have a comma after the "n." but
+does not, so it appears to be the middle of an entry beginning after "stumble;"
+and ending before "make a mess of."
+
+=back
 
 =head1 TODO
 
-Well, a good first step would be a TODO section, and the THE FILE section,
-above.
+Well, a good first step would be a TODO section.
 
 I'll write some tests that will only run if you put a C<roget15a.txt> file in
 the right place.  I'll also try the tests with previous revisions of the file.

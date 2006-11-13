@@ -1,12 +1,15 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Parse-GutenbergRoget
-version:      0.02
-version_from: lib/Parse/GutenbergRoget.pm
-installdirs:  site
-requires:
+--- #YAML:1.0
+name:                Parse-GutenbergRoget
+version:             0.021
+abstract:            parse Project Gutenberg's Roget's Thesaurus
+license:             perl
+generated_by:        ExtUtils::MakeMaker version 6.31
+distribution_type:   module
+requires:     
     Test::More:                    0
     Text::CSV_XS:                  0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.2.html
+    version: 1.2
+author:
+    - Ricardo Signes <rjbs@cpan.org>
